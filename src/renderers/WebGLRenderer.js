@@ -43,6 +43,9 @@ function WebGLRenderer( parameters ) {
 
 	console.log( 'THREE.WebGLRenderer', REVISION );
 
+	this.allofw = parameters.allofw;
+	console.log(this.allofw);
+
 	parameters = parameters || {};
 
 	var _canvas = parameters.canvas !== undefined ? parameters.canvas : document.createElementNS( 'http://www.w3.org/1999/xhtml', 'canvas' ),
@@ -1319,6 +1322,7 @@ function WebGLRenderer( parameters ) {
 	// TODO Duplicated code (Frustum)
 
 	function isObjectViewable( object ) {
+		return true;
 
 		var geometry = object.geometry;
 
@@ -1479,7 +1483,7 @@ function WebGLRenderer( parameters ) {
 			var group = renderItem.group;
 
 			object.modelViewMatrix.multiplyMatrices( camera.matrixWorldInverse, object.matrixWorld );
-			object.normalMatrix.getNormalMatrix( object.modelViewMatrix );
+			object.normalMatrix.getNormalMatrix( object.matrixWorld );
 
 			object.onBeforeRender( _this, scene, camera, geometry, material, group );
 

@@ -2,11 +2,11 @@
 
 	#ifdef USE_SKINNING
 
-		vec4 worldPosition = modelMatrix * skinned;
+		vec4 worldPosition = modelMatrix * vec4(skinned.xyz, 1.0);
 
 	#else
 
-		vec4 worldPosition = modelMatrix * vec4( transformed, 1.0 );
+		vec4 worldPosition = modelMatrix * vec4(transformed.xyz, 1.0);
 
 	#endif
 

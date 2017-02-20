@@ -4945,7 +4945,7 @@
 
 	var cube_uv_reflection_fragment = "#ifdef ENVMAP_TYPE_CUBE_UV\n#define cubeUV_textureSize (1024.0)\nint getFaceFromDirection(vec3 direction) {\n\tvec3 absDirection = abs(direction);\n\tint face = -1;\n\tif( absDirection.x > absDirection.z ) {\n\t\tif(absDirection.x > absDirection.y )\n\t\t\tface = direction.x > 0.0 ? 0 : 3;\n\t\telse\n\t\t\tface = direction.y > 0.0 ? 1 : 4;\n\t}\n\telse {\n\t\tif(absDirection.z > absDirection.y )\n\t\t\tface = direction.z > 0.0 ? 2 : 5;\n\t\telse\n\t\t\tface = direction.y > 0.0 ? 1 : 4;\n\t}\n\treturn face;\n}\n#define cubeUV_maxLods1  (log2(cubeUV_textureSize*0.25) - 1.0)\n#define cubeUV_rangeClamp (exp2((6.0 - 1.0) * 2.0))\nvec2 MipLevelInfo( vec3 vec, float roughnessLevel, float roughness ) {\n\tfloat scale = exp2(cubeUV_maxLods1 - roughnessLevel);\n\tfloat dxRoughness = dFdx(roughness);\n\tfloat dyRoughness = dFdy(roughness);\n\tvec3 dx = dFdx( vec * scale * dxRoughness );\n\tvec3 dy = dFdy( vec * scale * dyRoughness );\n\tfloat d = max( dot( dx, dx ), dot( dy, dy ) );\n\td = clamp(d, 1.0, cubeUV_rangeClamp);\n\tfloat mipLevel = 0.5 * log2(d);\n\treturn vec2(floor(mipLevel), fract(mipLevel));\n}\n#define cubeUV_maxLods2 (log2(cubeUV_textureSize*0.25) - 2.0)\n#define cubeUV_rcpTextureSize (1.0 / cubeUV_textureSize)\nvec2 getCubeUV(vec3 direction, float roughnessLevel, float mipLevel) {\n\tmipLevel = roughnessLevel > cubeUV_maxLods2 - 3.0 ? 0.0 : mipLevel;\n\tfloat a = 16.0 * cubeUV_rcpTextureSize;\n\tvec2 exp2_packed = exp2( vec2( roughnessLevel, mipLevel ) );\n\tvec2 rcp_exp2_packed = vec2( 1.0 ) / exp2_packed;\n\tfloat powScale = exp2_packed.x * exp2_packed.y;\n\tfloat scale = rcp_exp2_packed.x * rcp_exp2_packed.y * 0.25;\n\tfloat mipOffset = 0.75*(1.0 - rcp_exp2_packed.y) * rcp_exp2_packed.x;\n\tbool bRes = mipLevel == 0.0;\n\tscale =  bRes && (scale < a) ? a : scale;\n\tvec3 r;\n\tvec2 offset;\n\tint face = getFaceFromDirection(direction);\n\tfloat rcpPowScale = 1.0 / powScale;\n\tif( face == 0) {\n\t\tr = vec3(direction.x, -direction.z, direction.y);\n\t\toffset = vec2(0.0+mipOffset,0.75 * rcpPowScale);\n\t\toffset.y = bRes && (offset.y < 2.0*a) ? a : offset.y;\n\t}\n\telse if( face == 1) {\n\t\tr = vec3(direction.y, direction.x, direction.z);\n\t\toffset = vec2(scale+mipOffset, 0.75 * rcpPowScale);\n\t\toffset.y = bRes && (offset.y < 2.0*a) ? a : offset.y;\n\t}\n\telse if( face == 2) {\n\t\tr = vec3(direction.z, direction.x, direction.y);\n\t\toffset = vec2(2.0*scale+mipOffset, 0.75 * rcpPowScale);\n\t\toffset.y = bRes && (offset.y < 2.0*a) ? a : offset.y;\n\t}\n\telse if( face == 3) {\n\t\tr = vec3(direction.x, direction.z, direction.y);\n\t\toffset = vec2(0.0+mipOffset,0.5 * rcpPowScale);\n\t\toffset.y = bRes && (offset.y < 2.0*a) ? 0.0 : offset.y;\n\t}\n\telse if( face == 4) {\n\t\tr = vec3(direction.y, direction.x, -direction.z);\n\t\toffset = vec2(scale+mipOffset, 0.5 * rcpPowScale);\n\t\toffset.y = bRes && (offset.y < 2.0*a) ? 0.0 : offset.y;\n\t}\n\telse {\n\t\tr = vec3(direction.z, -direction.x, direction.y);\n\t\toffset = vec2(2.0*scale+mipOffset, 0.5 * rcpPowScale);\n\t\toffset.y = bRes && (offset.y < 2.0*a) ? 0.0 : offset.y;\n\t}\n\tr = normalize(r);\n\tfloat texelOffset = 0.5 * cubeUV_rcpTextureSize;\n\tvec2 s = ( r.yz / abs( r.x ) + vec2( 1.0 ) ) * 0.5;\n\tvec2 base = offset + vec2( texelOffset );\n\treturn base + s * ( scale - 2.0 * texelOffset );\n}\n#define cubeUV_maxLods3 (log2(cubeUV_textureSize*0.25) - 3.0)\nvec4 textureCubeUV(vec3 reflectedDirection, float roughness ) {\n\tfloat roughnessVal = roughness* cubeUV_maxLods3;\n\tfloat r1 = floor(roughnessVal);\n\tfloat r2 = r1 + 1.0;\n\tfloat t = fract(roughnessVal);\n\tvec2 mipInfo = MipLevelInfo(reflectedDirection, r1, roughness);\n\tfloat s = mipInfo.y;\n\tfloat level0 = mipInfo.x;\n\tfloat level1 = level0 + 1.0;\n\tlevel1 = level1 > 5.0 ? 5.0 : level1;\n\tlevel0 += min( floor( s + 0.5 ), 5.0 );\n\tvec2 uv_10 = getCubeUV(reflectedDirection, r1, level0);\n\tvec4 color10 = envMapTexelToLinear(texture2D(envMap, uv_10));\n\tvec2 uv_20 = getCubeUV(reflectedDirection, r2, level0);\n\tvec4 color20 = envMapTexelToLinear(texture2D(envMap, uv_20));\n\tvec4 result = mix(color10, color20, t);\n\treturn vec4(result.rgb, 1.0);\n}\n#endif\n";
 
-	var defaultnormal_vertex = "#ifdef FLIP_SIDED\n\tobjectNormal = -objectNormal;\n#endif\nvec3 transformedNormal = normalMatrix * objectNormal;\n";
+	var defaultnormal_vertex = "#ifdef FLIP_SIDED\n\tobjectNormal = -objectNormal;\n#endif\nvec3 transformedNormal = omni_transform_normal(normalMatrix * objectNormal);\n";
 
 	var displacementmap_pars_vertex = "#ifdef USE_DISPLACEMENTMAP\n\tuniform sampler2D displacementMap;\n\tuniform float displacementScale;\n\tuniform float displacementBias;\n#endif\n";
 
@@ -5031,7 +5031,7 @@
 
 	var premultiplied_alpha_fragment = "#ifdef PREMULTIPLIED_ALPHA\n\tgl_FragColor.rgb *= gl_FragColor.a;\n#endif\n";
 
-	var project_vertex = "#ifdef USE_SKINNING\n\tvec4 mvPosition = modelViewMatrix * skinned;\n#else\n\tvec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );\n#endif\ngl_Position = projectionMatrix * mvPosition;\n";
+	var project_vertex = "#ifdef USE_SKINNING\n\tvec4 mvPosition = vec4(omni_transform((modelMatrix * vec4(skinned.xyz, 1.0)).xyz), 1.0);\n#else\n\tvec4 mvPosition = vec4(omni_transform((modelMatrix * vec4(transformed, 1.0)).xyz), 1.0);\n#endif\ngl_Position = omni_render(mvPosition.xyz);\n";
 
 	var roughnessmap_fragment = "float roughnessFactor = roughness;\n#ifdef USE_ROUGHNESSMAP\n\tvec4 texelRoughness = texture2D( roughnessMap, vUv );\n\troughnessFactor *= texelRoughness.r;\n#endif\n";
 
@@ -5073,7 +5073,7 @@
 
 	var uv2_vertex = "#if defined( USE_LIGHTMAP ) || defined( USE_AOMAP )\n\tvUv2 = uv2;\n#endif";
 
-	var worldpos_vertex = "#if defined( USE_ENVMAP ) || defined( PHONG ) || defined( PHYSICAL ) || defined( LAMBERT ) || defined ( USE_SHADOWMAP )\n\t#ifdef USE_SKINNING\n\t\tvec4 worldPosition = modelMatrix * skinned;\n\t#else\n\t\tvec4 worldPosition = modelMatrix * vec4( transformed, 1.0 );\n\t#endif\n#endif\n";
+	var worldpos_vertex = "#if defined( USE_ENVMAP ) || defined( PHONG ) || defined( PHYSICAL ) || defined( LAMBERT ) || defined ( USE_SHADOWMAP )\n\t#ifdef USE_SKINNING\n\t\tvec4 worldPosition = modelMatrix * vec4(skinned.xyz, 1.0);\n\t#else\n\t\tvec4 worldPosition = modelMatrix * vec4(transformed.xyz, 1.0);\n\t#endif\n#endif\n";
 
 	var cube_frag = "uniform samplerCube tCube;\nuniform float tFlip;\nuniform float opacity;\nvarying vec3 vWorldPosition;\n#include <common>\nvoid main() {\n\tgl_FragColor = textureCube( tCube, vec3( tFlip * vWorldPosition.x, vWorldPosition.yz ) );\n\tgl_FragColor.a *= opacity;\n}\n";
 
@@ -5093,7 +5093,7 @@
 
 	var linedashed_frag = "uniform vec3 diffuse;\nuniform float opacity;\nuniform float dashSize;\nuniform float totalSize;\nvarying float vLineDistance;\n#include <common>\n#include <color_pars_fragment>\n#include <fog_pars_fragment>\n#include <logdepthbuf_pars_fragment>\n#include <clipping_planes_pars_fragment>\nvoid main() {\n\t#include <clipping_planes_fragment>\n\tif ( mod( vLineDistance, totalSize ) > dashSize ) {\n\t\tdiscard;\n\t}\n\tvec3 outgoingLight = vec3( 0.0 );\n\tvec4 diffuseColor = vec4( diffuse, opacity );\n\t#include <logdepthbuf_fragment>\n\t#include <color_fragment>\n\toutgoingLight = diffuseColor.rgb;\n\tgl_FragColor = vec4( outgoingLight, diffuseColor.a );\n\t#include <premultiplied_alpha_fragment>\n\t#include <tonemapping_fragment>\n\t#include <encodings_fragment>\n\t#include <fog_fragment>\n}\n";
 
-	var linedashed_vert = "uniform float scale;\nattribute float lineDistance;\nvarying float vLineDistance;\n#include <common>\n#include <color_pars_vertex>\n#include <fog_pars_vertex>\n#include <logdepthbuf_pars_vertex>\n#include <clipping_planes_pars_vertex>\nvoid main() {\n\t#include <color_vertex>\n\tvLineDistance = scale * lineDistance;\n\tvec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );\n\tgl_Position = projectionMatrix * mvPosition;\n\t#include <logdepthbuf_vertex>\n\t#include <clipping_planes_vertex>\n\t#include <fog_vertex>\n}\n";
+	var linedashed_vert = "uniform float scale;\nattribute float lineDistance;\nvarying float vLineDistance;\n#include <common>\n#include <color_pars_vertex>\n#include <fog_pars_vertex>\n#include <logdepthbuf_pars_vertex>\n#include <clipping_planes_pars_vertex>\nvoid main() {\n\t#include <color_vertex>\n\tvLineDistance = scale * lineDistance;\n\tvec4 mvPosition = vec4(omni_transform(position), 1.0);\n\tgl_Position = omni_project(mvPosition.xyz);\n\t#include <logdepthbuf_vertex>\n\t#include <clipping_planes_vertex>\n\t#include <fog_vertex>\n}\n";
 
 	var meshbasic_frag = "uniform vec3 diffuse;\nuniform float opacity;\n#ifndef FLAT_SHADED\n\tvarying vec3 vNormal;\n#endif\n#include <common>\n#include <color_pars_fragment>\n#include <uv_pars_fragment>\n#include <uv2_pars_fragment>\n#include <map_pars_fragment>\n#include <alphamap_pars_fragment>\n#include <aomap_pars_fragment>\n#include <lightmap_pars_fragment>\n#include <envmap_pars_fragment>\n#include <fog_pars_fragment>\n#include <specularmap_pars_fragment>\n#include <logdepthbuf_pars_fragment>\n#include <clipping_planes_pars_fragment>\nvoid main() {\n\t#include <clipping_planes_fragment>\n\tvec4 diffuseColor = vec4( diffuse, opacity );\n\t#include <logdepthbuf_fragment>\n\t#include <map_fragment>\n\t#include <color_fragment>\n\t#include <alphamap_fragment>\n\t#include <alphatest_fragment>\n\t#include <specularmap_fragment>\n\tReflectedLight reflectedLight = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );\n\t#ifdef USE_LIGHTMAP\n\t\treflectedLight.indirectDiffuse += texture2D( lightMap, vUv2 ).xyz * lightMapIntensity;\n\t#else\n\t\treflectedLight.indirectDiffuse += vec3( 1.0 );\n\t#endif\n\t#include <aomap_fragment>\n\treflectedLight.indirectDiffuse *= diffuseColor.rgb;\n\tvec3 outgoingLight = reflectedLight.indirectDiffuse;\n\t#include <normal_flip>\n\t#include <envmap_fragment>\n\tgl_FragColor = vec4( outgoingLight, diffuseColor.a );\n\t#include <premultiplied_alpha_fragment>\n\t#include <tonemapping_fragment>\n\t#include <encodings_fragment>\n\t#include <fog_fragment>\n}\n";
 
@@ -7517,7 +7517,7 @@
 		this.defines = {};
 		this.uniforms = {};
 
-		this.vertexShader = 'void main() {\n\tgl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n}';
+		this.vertexShader = 'void main() {\n\tgl_Position = omni_render(omni_transform(position));\n}';
 		this.fragmentShader = 'void main() {\n\tgl_FragColor = vec4( 1.0, 0.0, 0.0, 1.0 );\n}';
 
 		this.linewidth = 1;
@@ -16607,7 +16607,7 @@
 
 			prefixVertex = [
 
-	        
+
 				'precision ' + parameters.precision + ' float;',
 				'precision ' + parameters.precision + ' int;',
 
@@ -16658,6 +16658,8 @@
 
 				parameters.logarithmicDepthBuffer ? '#define USE_LOGDEPTHBUF' : '',
 				parameters.logarithmicDepthBuffer && renderer.extensions.get( 'EXT_frag_depth' ) ? '#define USE_LOGDEPTHBUF_EXT' : '',
+
+				renderer.allofw.omni.getShaderCode(),
 
 				'uniform mat4 modelMatrix;',
 				'uniform mat4 modelViewMatrix;',
@@ -19801,6 +19803,9 @@
 
 		console.log( 'THREE.WebGLRenderer', REVISION );
 
+		this.allofw = parameters.allofw;
+		console.log(this.allofw);
+
 		parameters = parameters || {};
 
 		var _canvas = parameters.canvas !== undefined ? parameters.canvas : document.createElementNS( 'http://www.w3.org/1999/xhtml', 'canvas' ),
@@ -21077,6 +21082,7 @@
 		// TODO Duplicated code (Frustum)
 
 		function isObjectViewable( object ) {
+			return true;
 
 			var geometry = object.geometry;
 
@@ -21237,7 +21243,7 @@
 				var group = renderItem.group;
 
 				object.modelViewMatrix.multiplyMatrices( camera.matrixWorldInverse, object.matrixWorld );
-				object.normalMatrix.getNormalMatrix( object.modelViewMatrix );
+				object.normalMatrix.getNormalMatrix( object.matrixWorld );
 
 				object.onBeforeRender( _this, scene, camera, geometry, material, group );
 
@@ -29133,6 +29139,8 @@
 	 * @author mrdoob / http://mrdoob.com/
 	 */
 
+	let fs = require("fs");
+
 	function FileLoader( manager ) {
 
 		this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
@@ -29142,185 +29150,189 @@
 	Object.assign( FileLoader.prototype, {
 
 		load: function ( url, onLoad, onProgress, onError ) {
+			let filename = url;
+			if(this.path != undefined) filename = this.path + url;
+			let data = fs.readFile(filename, "binary", (err, data) => {
+				onLoad(data);
+			});
+			// if ( url === undefined ) url = '';
 
-			if ( url === undefined ) url = '';
+			// if ( this.path !== undefined ) url = this.path + url;
 
-			if ( this.path !== undefined ) url = this.path + url;
+			// var scope = this;
 
-			var scope = this;
+			// var cached = Cache.get( url );
 
-			var cached = Cache.get( url );
+			// if ( cached !== undefined ) {
 
-			if ( cached !== undefined ) {
+			// 	scope.manager.itemStart( url );
 
-				scope.manager.itemStart( url );
+			// 	setTimeout( function () {
 
-				setTimeout( function () {
+			// 		if ( onLoad ) onLoad( cached );
 
-					if ( onLoad ) onLoad( cached );
+			// 		scope.manager.itemEnd( url );
 
-					scope.manager.itemEnd( url );
+			// 	}, 0 );
 
-				}, 0 );
+			// 	return cached;
 
-				return cached;
+			// }
 
-			}
+			// // Check for data: URI
+			// var dataUriRegex = /^data:(.*?)(;base64)?,(.*)$/;
+			// var dataUriRegexResult = url.match( dataUriRegex );
 
-			// Check for data: URI
-			var dataUriRegex = /^data:(.*?)(;base64)?,(.*)$/;
-			var dataUriRegexResult = url.match( dataUriRegex );
+			// // Safari can not handle Data URIs through XMLHttpRequest so process manually
+			// if ( dataUriRegexResult ) {
 
-			// Safari can not handle Data URIs through XMLHttpRequest so process manually
-			if ( dataUriRegexResult ) {
+			// 	var mimeType = dataUriRegexResult[ 1 ];
+			// 	var isBase64 = !! dataUriRegexResult[ 2 ];
+			// 	var data = dataUriRegexResult[ 3 ];
 
-				var mimeType = dataUriRegexResult[ 1 ];
-				var isBase64 = !! dataUriRegexResult[ 2 ];
-				var data = dataUriRegexResult[ 3 ];
+			// 	data = window.decodeURIComponent( data );
 
-				data = window.decodeURIComponent( data );
+			// 	if ( isBase64 ) data = window.atob( data );
 
-				if ( isBase64 ) data = window.atob( data );
+			// 	try {
 
-				try {
+			// 		var response;
+			// 		var responseType = ( this.responseType || '' ).toLowerCase();
 
-					var response;
-					var responseType = ( this.responseType || '' ).toLowerCase();
+			// 		switch ( responseType ) {
 
-					switch ( responseType ) {
+			// 			case 'arraybuffer':
+			// 			case 'blob':
 
-						case 'arraybuffer':
-						case 'blob':
+			// 			 	response = new ArrayBuffer( data.length );
 
-						 	response = new ArrayBuffer( data.length );
+			// 				var view = new Uint8Array( response );
 
-							var view = new Uint8Array( response );
+			// 				for ( var i = 0; i < data.length; i ++ ) {
 
-							for ( var i = 0; i < data.length; i ++ ) {
+			// 					view[ i ] = data.charCodeAt( i );
 
-								view[ i ] = data.charCodeAt( i );
+			// 				}
 
-							}
+			// 				if ( responseType === 'blob' ) {
 
-							if ( responseType === 'blob' ) {
+			// 					response = new Blob( [ response ], { type: mimeType } );
 
-								response = new Blob( [ response ], { type: mimeType } );
+			// 				}
 
-							}
+			// 				break;
 
-							break;
+			// 			case 'document':
 
-						case 'document':
+			// 				var parser = new DOMParser();
+			// 				response = parser.parseFromString( data, mimeType );
 
-							var parser = new DOMParser();
-							response = parser.parseFromString( data, mimeType );
+			// 				break;
 
-							break;
+			// 			case 'json':
 
-						case 'json':
+			// 				response = JSON.parse( data );
 
-							response = JSON.parse( data );
+			// 				break;
 
-							break;
+			// 			default: // 'text' or other
 
-						default: // 'text' or other
+			// 				response = data;
 
-							response = data;
+			// 				break;
 
-							break;
+			// 		}
 
-					}
+			// 		// Wait for next browser tick
+			// 		window.setTimeout( function () {
 
-					// Wait for next browser tick
-					window.setTimeout( function () {
+			// 			if ( onLoad ) onLoad( response );
 
-						if ( onLoad ) onLoad( response );
+			// 			scope.manager.itemEnd( url );
 
-						scope.manager.itemEnd( url );
+			// 		}, 0 );
 
-					}, 0 );
+			// 	} catch ( error ) {
 
-				} catch ( error ) {
+			// 		// Wait for next browser tick
+			// 		window.setTimeout( function () {
 
-					// Wait for next browser tick
-					window.setTimeout( function () {
+			// 			if ( onError ) onError( error );
 
-						if ( onError ) onError( error );
+			// 			scope.manager.itemError( url );
 
-						scope.manager.itemError( url );
+			// 		}, 0 );
 
-					}, 0 );
+			// 	}
 
-				}
+			// } else {
 
-			} else {
+			// 	var request = new XMLHttpRequest();
+			// 	request.open( 'GET', url, true );
 
-				var request = new XMLHttpRequest();
-				request.open( 'GET', url, true );
+			// 	request.addEventListener( 'load', function ( event ) {
 
-				request.addEventListener( 'load', function ( event ) {
+			// 		var response = event.target.response;
 
-					var response = event.target.response;
+			// 		Cache.add( url, response );
 
-					Cache.add( url, response );
+			// 		if ( this.status === 200 ) {
 
-					if ( this.status === 200 ) {
+			// 			if ( onLoad ) onLoad( response );
 
-						if ( onLoad ) onLoad( response );
+			// 			scope.manager.itemEnd( url );
 
-						scope.manager.itemEnd( url );
+			// 		} else if ( this.status === 0 ) {
 
-					} else if ( this.status === 0 ) {
+			// 			// Some browsers return HTTP Status 0 when using non-http protocol
+			// 			// e.g. 'file://' or 'data://'. Handle as success.
 
-						// Some browsers return HTTP Status 0 when using non-http protocol
-						// e.g. 'file://' or 'data://'. Handle as success.
+			// 			console.warn( 'THREE.FileLoader: HTTP Status 0 received.' );
 
-						console.warn( 'THREE.FileLoader: HTTP Status 0 received.' );
+			// 			if ( onLoad ) onLoad( response );
 
-						if ( onLoad ) onLoad( response );
+			// 			scope.manager.itemEnd( url );
 
-						scope.manager.itemEnd( url );
+			// 		} else {
 
-					} else {
+			// 			if ( onError ) onError( event );
 
-						if ( onError ) onError( event );
+			// 			scope.manager.itemError( url );
 
-						scope.manager.itemError( url );
+			// 		}
 
-					}
+			// 	}, false );
 
-				}, false );
+			// 	if ( onProgress !== undefined ) {
 
-				if ( onProgress !== undefined ) {
+			// 		request.addEventListener( 'progress', function ( event ) {
 
-					request.addEventListener( 'progress', function ( event ) {
+			// 			onProgress( event );
 
-						onProgress( event );
+			// 		}, false );
 
-					}, false );
+			// 	}
 
-				}
+			// 	request.addEventListener( 'error', function ( event ) {
 
-				request.addEventListener( 'error', function ( event ) {
+			// 		if ( onError ) onError( event );
 
-					if ( onError ) onError( event );
+			// 		scope.manager.itemError( url );
 
-					scope.manager.itemError( url );
+			// 	}, false );
 
-				}, false );
+			// 	if ( this.responseType !== undefined ) request.responseType = this.responseType;
+			// 	if ( this.withCredentials !== undefined ) request.withCredentials = this.withCredentials;
 
-				if ( this.responseType !== undefined ) request.responseType = this.responseType;
-				if ( this.withCredentials !== undefined ) request.withCredentials = this.withCredentials;
+			// 	if ( request.overrideMimeType ) request.overrideMimeType( this.mimeType !== undefined ? this.mimeType : 'text/plain' );
 
-				if ( request.overrideMimeType ) request.overrideMimeType( this.mimeType !== undefined ? this.mimeType : 'text/plain' );
+			// 	request.send( null );
 
-				request.send( null );
+			// }
 
-			}
+			// scope.manager.itemStart( url );
 
-			scope.manager.itemStart( url );
-
-			return request;
+			// return request;
 
 		},
 

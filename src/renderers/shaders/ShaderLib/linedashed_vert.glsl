@@ -15,8 +15,8 @@ void main() {
 
 	vLineDistance = scale * lineDistance;
 
-	vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-	gl_Position = projectionMatrix * mvPosition;
+	vec4 mvPosition = vec4(omni_transform(position), 1.0);
+	gl_Position = omni_project(mvPosition.xyz);
 
 	#include <logdepthbuf_vertex>
 	#include <clipping_planes_vertex>

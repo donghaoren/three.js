@@ -4,4 +4,4 @@
 
 #endif
 
-vec3 transformedNormal = normalMatrix * objectNormal;
+vec3 transformedNormal = omni_transform_normal(normalMatrix * objectNormal);
